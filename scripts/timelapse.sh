@@ -25,7 +25,11 @@ bash
 ffmpeg -y -f image2 -r $FPS -i images/$1/sequence/%04d.$EXTENSION -codec:v h264_omx -b:v 2048k -pix_fmt yuv420p images/$1/allsky-$1.mp4
 
 if [ "$UPLOAD_VIDEO" = true ] ; then
-	lftp "$PROTOCOL"://"$USER":"$PASSWORD"@"$HOST":"$MP4DIR" -e "set net:max-retries 1; put images/$1/allsky-$1.mp4; bye"
+	if [[ $PROTOCOL == "ssh" ]] ; then
+    scp images/$1/allsky-$1.mp4 $USER@$HOST:$MP4DIR/
+  else
+    lftp "$PROTOCOL"://"$USER":"$PASSWORD"@"$HOST":"$MP4DIR" -e "set net:max-retries 1; put images/$1/allsky-$1.mp4; bye"
+  fi
 fi
 
 echo -en "* ${GREEN}Deleting sequence${NC}\n"
