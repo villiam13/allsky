@@ -213,12 +213,16 @@ to detect if there is an horizontal line cutting across the image and if there i
 return true.
 
 See bug_samples/mosaic-image.jpg for an example of the problem
+
+See https://www.codepool.biz/opencv-line-detection.html and https://stackoverflow.com/a/7228823
+for info about detecting horizontal lines
 **/
 bool mosaicImage(cv::Mat &src)
 {
     printf("Checking if this is a \"mosaic\" image.\n");
+    cv::Mat img_src = src.clone();
 
-    cv::Mat src_sobel = applySobel(src);
+    cv::Mat src_sobel = applySobel(img_src);
 
     // Usefull for debugging, gives us a copy of the image
     //imwrite("mosaic.jpg", src_sobel);
