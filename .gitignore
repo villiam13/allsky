@@ -17,3 +17,10 @@ scripts/keogram_only.sh
 scripts/startrails_manual.sh
 scripts/startrails_only.sh
 scripts/stretch.sh
+# The following were from the ASI SDK
+demo/*
+include/*
+lib/*
+doc/ASI*
+license.txt
+

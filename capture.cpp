@@ -26,6 +26,8 @@
 #define KCYN "\x1B[36m"
 #define KWHT "\x1B[37m"
 
+using namespace cv;
+
 //-------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------
 
@@ -39,6 +41,7 @@ std::string dayOrNight;
 bool bSaveRun = false, bSavingImg = false;
 pthread_mutex_t mtx_SaveImg;
 pthread_cond_t cond_SatrtSave;
+volatile long saveExpTime = 0;
 
 //-------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------
@@ -119,14 +122,16 @@ void *SaveImgThd(void *para)
         if (pRgb.data)
         {
             imwrite(fileName, pRgb, compression_parameters);
+            char buf[255];
             if (dayOrNight == "NIGHT")
             {
-                system("scripts/saveImageNight.sh &");
+                sprintf(buf, "scripts/saveImageNight.sh %ld &", saveExpTime);
             }
             else
             {
-                system("scripts/saveImageDay.sh &");
+                sprintf(buf, "scripts/saveImageDay.sh %ld &", saveExpTime);
             }
+            system(buf);
         }
         bSavingImg = false;
         pthread_mutex_unlock(&mtx_SaveImg);
@@ -155,6 +160,140 @@ void writeToLog(int val)
     outfile.open("log.txt", std::ios_base::app);
     outfile << val;
     outfile << "\n";
+}
+
+/**
+Apply a Sobel edge detection transform to help better spot the subtle lines
+when the mosaic effect occurs
+
+See https://docs.opencv.org/2.4/doc/tutorials/imgproc/imgtrans/sobel_derivatives/sobel_derivatives.html
+for the refrence code
+**/
+cv::Mat applySobel(cv::Mat &src)
+{
+    // Variables
+    cv::Mat src_gray;
+	cv::Mat sobel;
+
+	int scale = 1;
+	int delta = 0;
+	int ddepth = CV_16S;
+
+    // Perform a Sobel transform
+    cv::GaussianBlur( src, src, cv::Size(3,3), 0, 0, cv::BORDER_DEFAULT );
+
+    // Convert it to gray (using CV_BGR2GRAY as that seems to work)
+	cv::cvtColor( src, src_gray, CV_BGR2GRAY );
+
+    // Generate grad_x and grad_y
+	cv::Mat grad_x, grad_y;
+	cv::Mat abs_grad_x, abs_grad_y;
+
+    /// Gradient X
+	cv::Sobel( src_gray, grad_x, ddepth, 1, 0, 3, scale, delta, cv::BORDER_DEFAULT );
+	cv::convertScaleAbs( grad_x, abs_grad_x );
+
+    /// Gradient Y
+	cv::Sobel( src_gray, grad_y, ddepth, 0, 1, 3, scale, delta, cv::BORDER_DEFAULT );
+	cv::convertScaleAbs( grad_y, abs_grad_y );
+
+    // Total Gradient (approximate)
+    // We set thr weight of the grad_x to 0 because in my camera's case those would
+    // be vertical lines
+	cv::addWeighted( abs_grad_x, 0.0, abs_grad_y, 0.8, 0, sobel );
+
+    // Return the image
+    return sobel;
+}
+
+/**
+Some ASi120MC clone cameras (and perhaps others) will occasionaly produce an image
+which is comprised of multiple rectangles of parts of the scene. This function attempts
+to detect if there is an horizontal line cutting across the image and if there is it will
+return true.
+
+See bug_samples/mosaic-image.jpg for an example of the problem
+
+See https://www.codepool.biz/opencv-line-detection.html and https://stackoverflow.com/a/7228823
+for info about detecting horizontal lines
+**/
+bool mosaicImage(cv::Mat &src)
+{
+    printf("Checking if this is a \"mosaic\" image.\n");
+    cv::Mat img_src = src.clone();
+
+    cv::Mat src_sobel = applySobel(img_src);
+
+    // Usefull for debugging, gives us a copy of the image
+    //imwrite("mosaic.jpg", src_sobel);
+
+    cv::Mat img_canny, img_gray;
+
+    // Detect edges
+    cv::Canny(src_sobel, img_canny, 50, 200, 3);
+
+    std::vector<Vec4i> lines;
+	cv::HoughLinesP(img_canny, lines, 1, CV_PI / 2, 50, 50, 10);
+    //printf("Lines: %d\n", lines.size());
+
+    if (lines.size() > 0) {
+        printf("We found some horizontal lines.\n");
+
+        // useful for debugging
+        //img_copy = img_canny.clone();
+
+        /*for (size_t i = 0; i < lines.size(); i++)
+	    {
+		    Vec4i l = lines[i];
+		    line(img_copy, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 3, 2);
+	    }
+
+	    imwrite("horizontal.jpg", img_copy); */
+
+        return true;
+    }
+
+    
+    return false;
+}
+
+bool brokenDetector(cv::Mat &src)
+{
+    int i, j, c;
+
+    int ddepth = -1;
+    cv::Point anchor = cv::Point( -1, -1 );
+    double delta = 0;
+    float filter[3][3] = {{1,1,1}, {0,0,0}, {-1,-1,-1}};
+    cv::Mat kernel = cv::Mat( 3, 3, CV_32F, filter );
+    // Apply filter
+    cv::Mat dst;
+    cv::filter2D(src, dst, ddepth , kernel, anchor, delta, cv::BORDER_DEFAULT );
+
+    cv::resize(dst, dst, cv::Size(16, pRgb.rows), 0, 0, cv::INTER_AREA);
+    // imwrite("out.jpg", dst);
+    for (i = 0; i < dst.rows; i++)
+    {
+        c = 0;
+        for (j = 0; j < dst.cols; j++)
+        {
+            if (dst.at<uint8_t>(i,j) > 80)
+            {
+                // printf("%dx%d: %d\n", i, j, dst.at<uint8_t>(i,j));
+                c ++;
+            }
+            else
+            {
+                c = 0;
+            }
+            if (c > dst.cols / 2)
+            {
+                printf("detected! %d at %d line\n", c, i);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 //-------------------------------------------------------------------------------------------------------
@@ -818,11 +957,17 @@ int main(int argc, char *argv[])
             }
             // Set exposure value for night time capture
             useDelay = delay;
-	    ASISetControlValue(CamNum, ASI_EXPOSURE, currentExposure, asiAutoExposure == 1 ? ASI_TRUE : ASI_FALSE);
+            ASISetControlValue(CamNum, ASI_EXPOSURE, currentExposure, asiAutoExposure == 1 ? ASI_TRUE : ASI_FALSE);
             ASISetControlValue(CamNum, ASI_GAIN, asiGain, asiAutoGain == 1 ? ASI_TRUE : ASI_FALSE);
         }
         printf("Press Ctrl+C to stop\n\n");
 
+        /*
+        William - Not sure why we are ignoring auto exposure changes
+
+        long lastExp = 0;
+        int flushingStatus = 0;
+        */
         if (needCapture)
         {
             ASIStartVideoCapture(CamNum);
@@ -834,6 +979,38 @@ int main(int argc, char *argv[])
                     ASIGetControlValue(CamNum, ASI_EXPOSURE, &autoExp, &bAuto);
                     ASIGetControlValue(CamNum, ASI_GAIN, &autoGain, &bAuto);
                     ASIGetControlValue(CamNum, ASI_TEMPERATURE, &ltemp, &bAuto);
+
+                    /*
+                    William - Not sure why we are ignoring auto exposure changes
+
+                    if (lastExp != autoExp)
+                    {
+                        flushingStatus = 2;
+                        printf("exp changed %ld -> %ld, flushing ...\n", lastExp, autoExp);
+                    }
+                    lastExp = autoExp;
+                    if (flushingStatus != 0)
+                    {
+                        printf("flushing %d\n", flushingStatus);
+                        flushingStatus --;
+                        continue;
+                    }
+                    */
+                    if (brokenDetector(pRgb))
+                    {
+                        printf("bad image detected!\n");
+                        continue;
+                    }
+
+                    /**
+                    The following function will check if the image is a "mosaic", meaning it is composed
+                    of multiple rectangles of various images. This happens on some ASI120MC clone cameras                    
+                    **/
+                    if (mosaicImage(pRgb))
+                    {
+                        printf("Mosaic Image deteced! Trying again\n");
+                        continue;
+                    }
 
                     // Get Current Time for overlay
                     sprintf(bufTime, "%s", getTime());
@@ -882,6 +1059,7 @@ int main(int argc, char *argv[])
                     if (!bSavingImg)
                     {
                         pthread_mutex_lock(&mtx_SaveImg);
+                        saveExpTime = autoExp;
                         pthread_cond_signal(&cond_SatrtSave);
                         pthread_mutex_unlock(&mtx_SaveImg);
                     }
