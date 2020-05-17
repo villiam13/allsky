@@ -87,9 +87,9 @@ int main(int argc, char *argv[])
         if (parts.size() == 3)
         {
             long expTime =std::stol(parts[2]);
-            if (expTime < 15000000)
+            if (expTime < 10000000)
             {
-                std::cout << "[" << f + 1 << "/" << files.gl_pathc << "] " << basename(files.gl_pathv[f]) << " expTime: " << expTime << " < " << 15000000 << std::endl;
+                std::cout << "[" << f + 1 << "/" << files.gl_pathc << "] " << basename(files.gl_pathv[f]) << " expTime: " << expTime << " < " << 10000000 << std::endl;
                 continue;
             }
         }
