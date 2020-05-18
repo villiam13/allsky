@@ -16,6 +16,8 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <fstream>
+#include <syslog.h>
+#include <stdarg.h>
 
 #define KNRM "\x1B[0m"
 #define KRED "\x1B[31m"
@@ -65,6 +67,19 @@ void cvText(cv::Mat &img, const char *text, int x, int y, double fontsize, int l
     }
 }
 
+void a_logger(const char *format, ...)
+{
+    char c_buff[1000];
+
+    va_list arg;
+    va_start(arg, format);
+    vsprintf (c_buff, format, arg);
+    va_end (arg);
+
+    printf("%s", c_buff);
+    syslog(LOG_INFO, c_buff);
+}
+
 char *getTime()
 {
     static int seconds_last = 99;
@@ -108,7 +123,7 @@ void *Display(void *params)
         cvWaitKey(100);
     }
     cvDestroyWindow("video");
-    printf("Display thread over\n");
+    a_logger("Display thread over\n");
     return (void *)0;
 }
 
@@ -137,7 +152,7 @@ void *SaveImgThd(void *para)
         pthread_mutex_unlock(&mtx_SaveImg);
     }
 
-    printf("save thread over\n");
+    a_logger("save thread over\n");
     return (void *)0;
 }
 
@@ -219,7 +234,7 @@ for info about detecting horizontal lines
 **/
 bool mosaicImage(cv::Mat &src)
 {
-    printf("Checking if this is a \"mosaic\" image.\n");
+    a_logger("Checking if this is a \"mosaic\" image.\n");
     cv::Mat img_src = src.clone();
 
     cv::Mat src_sobel = applySobel(img_src);
@@ -234,10 +249,10 @@ bool mosaicImage(cv::Mat &src)
 
     std::vector<Vec4i> lines;
 	cv::HoughLinesP(img_canny, lines, 1, CV_PI / 2, 50, 50, 10);
-    //printf("Lines: %d\n", lines.size());
+    //a_logger("Lines: %d\n", lines.size());
 
     if (lines.size() > 0) {
-        printf("We found some horizontal lines.\n");
+        a_logger("We found some horizontal lines.\n");
 
         // useful for debugging
         //img_copy = img_canny.clone();
@@ -279,7 +294,7 @@ bool brokenDetector(cv::Mat &src)
         {
             if (dst.at<uint8_t>(i,j) > 80)
             {
-                // printf("%dx%d: %d\n", i, j, dst.at<uint8_t>(i,j));
+                // a_logger("%dx%d: %d\n", i, j, dst.at<uint8_t>(i,j));
                 c ++;
             }
             else
@@ -288,7 +303,7 @@ bool brokenDetector(cv::Mat &src)
             }
             if (c > dst.cols / 2)
             {
-                printf("detected! %d at %d line\n", c, i);
+                a_logger("Broken Image detected! %d at %d line\n", c, i);
                 return true;
             }
         }
@@ -363,22 +378,22 @@ int main(int argc, char *argv[])
 
     //-------------------------------------------------------------------------------------------------------
     //-------------------------------------------------------------------------------------------------------
-    printf("\n");
-    printf("%s ******************************************\n", KGRN);
-    printf("%s *** Allsky Camera Software v0.6 | 2019 ***\n", KGRN);
-    printf("%s ******************************************\n\n", KGRN);
-    printf("\%sCapture images of the sky with a Raspberry Pi and an ASI Camera\n", KGRN);
-    printf("\n");
-    printf("%sAdd -h or -help for available options \n", KYEL);
-    printf("\n");
-    printf("\%sAuthor: ", KNRM);
-    printf("Thomas Jacquin - <jacquin.thomas@gmail.com>\n\n");
-    printf("\%sContributors:\n", KNRM);
-    printf("-Knut Olav Klo\n");
-    printf("-Daniel Johnsen\n");
-    printf("-Yang and Sam from ZWO\n");
-    printf("-Robert Wagner\n");
-    printf("-Michael J. Kidd - <linuxkidd@gmail.com>\n\n");
+    a_logger("\n");
+    a_logger("%s ******************************************\n", KGRN);    
+    a_logger("%s *** Allsky Camera Software v0.6 | 2019 ***\n", KGRN);    
+    a_logger("%s ******************************************\n\n", KGRN);    
+    a_logger("\%sCapture images of the sky with a Raspberry Pi and an ASI Camera\n", KGRN);    
+    a_logger("\n");
+    a_logger("%sAdd -h or -help for available options \n", KYEL);    
+    a_logger("\n");
+    a_logger("\%sAuthor: ", KNRM);    
+    a_logger("Thomas Jacquin - <jacquin.thomas@gmail.com>\n\n");
+    a_logger("\%sContributors:\n", KNRM);    
+    a_logger("-Knut Olav Klo\n");
+    a_logger("-Daniel Johnsen\n");
+    a_logger("-Yang and Sam from ZWO\n");
+    a_logger("-Robert Wagner\n");
+    a_logger("-Michael J. Kidd - <linuxkidd@gmail.com>\n\n");
 
     if (argc > 0)
     {
@@ -615,7 +630,7 @@ int main(int argc, char *argv[])
         printf(" -autogain                          - Default = 0 - Set to 1 to enable auto Gain \n");
         printf(" -coolerEnabled                     - Set to 1 to enable cooler (works on cooled cameras only) \n");
         printf(" -targetTemp                        - Target temperature in degrees C (works on cooled cameras only) \n");
-	printf(" -gamma                             - Default = 50 \n");
+	    printf(" -gamma                             - Default = 50 \n");
         printf(" -brightness                        - Default = 50 \n");
         printf(" -wbr                               - Default = 50   - White Balance Red \n");
         printf(" -wbb                               - Default = 50   - White Balance Blue \n");
@@ -689,13 +704,13 @@ int main(int argc, char *argv[])
     int numDevices = ASIGetNumOfConnectedCameras();
     if (numDevices <= 0)
     {
-        printf("\nNo Connected Camera...\n");
+        a_logger("\nNo Connected Camera...\n");
         width  = 1; //Set to 1 when NO Cameras are connected to avoid error: OpenCV Error: Insufficient memory
         height = 1; //Set to 1 when NO Cameras are connected to avoid error: OpenCV Error: Insufficient memory
     }
     else
     {
-        printf("\nListing Attached Cameras:\n");
+        a_logger("\nListing Attached Cameras:\n");
     }
 
     ASI_CAMERA_INFO ASICameraInfo;
@@ -703,56 +718,56 @@ int main(int argc, char *argv[])
     for (i = 0; i < numDevices; i++)
     {
         ASIGetCameraProperty(&ASICameraInfo, i);
-        printf("- %d %s\n", i, ASICameraInfo.Name);
+        a_logger("- %d %s\n", i, ASICameraInfo.Name);        
     }
 
     if (ASIOpenCamera(CamNum) != ASI_SUCCESS)
     {
-        printf("Open Camera ERROR, Check that you have root permissions!\n");
+        a_logger("Open Camera ERROR, Check that you have root permissions!\n");
     }
 
-    printf("\n%s Information:\n", ASICameraInfo.Name);
+    a_logger("\n%s Information:\n", ASICameraInfo.Name);    
     int iMaxWidth, iMaxHeight;
     double pixelSize;
     iMaxWidth  = ASICameraInfo.MaxWidth;
     iMaxHeight = ASICameraInfo.MaxHeight;
     pixelSize  = ASICameraInfo.PixelSize;
-    printf("- Resolution:%dx%d\n", iMaxWidth, iMaxHeight);
-    printf("- Pixel Size: %1.1fμm\n", pixelSize);
-    printf("- Supported Bin: ");
+    a_logger("- Resolution:%dx%d\n", iMaxWidth, iMaxHeight);    
+    a_logger("- Pixel Size: %1.1fμm\n", pixelSize);    
+    a_logger("- Supported Bin: ");
     for (int i = 0; i < 16; ++i)
     {
         if (ASICameraInfo.SupportedBins[i] == 0)
         {
             break;
         }
-        printf("%d ", ASICameraInfo.SupportedBins[i]);
+        a_logger("%d ", ASICameraInfo.SupportedBins[i]);        
     }
-    printf("\n");
+    a_logger("\n");
 
     if (ASICameraInfo.IsColorCam)
     {
-        printf("- Color Camera: bayer pattern:%s\n", bayer[ASICameraInfo.BayerPattern]);
+        a_logger("- Color Camera: bayer pattern:%s\n", bayer[ASICameraInfo.BayerPattern]);        
     }
     else
     {
-        printf("- Mono camera\n");
+        a_logger("- Mono camera\n");
     }
     if (ASICameraInfo.IsCoolerCam)
     {
-        printf("- Camera with cooling capabilities\n");
+        a_logger("- Camera with cooling capabilities\n");
     }
 
     const char *ver = ASIGetSDKVersion();
-    printf("- SDK version %s\n", ver);
+    a_logger("- SDK version %s\n", ver);
 
     if (ASIInitCamera(CamNum) == ASI_SUCCESS)
     {
-        printf("- Initialise Camera OK\n");
+        a_logger("- Initialise Camera OK\n");
     }
     else
     {
-        printf("- Initialise Camera ERROR\n");
+        a_logger("- Initialise Camera ERROR\n");
     }
 
     ASI_CONTROL_CAPS ControlCaps;
@@ -761,7 +776,7 @@ int main(int argc, char *argv[])
     for (i = 0; i < iNumOfCtrl; i++)
     {
         ASIGetControlCaps(CamNum, i, &ControlCaps);
-        //printf("- %s\n", ControlCaps.Name);
+        //a_logger("- %s\n", ControlCaps.Name);
     }
 
     if (width == 0 || height == 0)
@@ -773,7 +788,7 @@ int main(int argc, char *argv[])
     long ltemp     = 0;
     ASI_BOOL bAuto = ASI_FALSE;
     ASIGetControlValue(CamNum, ASI_TEMPERATURE, &ltemp, &bAuto);
-    printf("- Sensor temperature:%02f\n", (float)ltemp / 10.0);
+    a_logger("- Sensor temperature:%02f\n", (float)ltemp / 10.0);
 
     // Adjusting variables for chosen binning
     height    = height / bin;
@@ -811,46 +826,46 @@ int main(int argc, char *argv[])
     //-------------------------------------------------------------------------------------------------------
     //-------------------------------------------------------------------------------------------------------
 
-    printf("%s", KGRN);
-    printf("\nCapture Settings: \n");
-    printf(" Image Type: %s\n", sType);
-    printf(" Resolution: %dx%d \n", width, height);
-    printf(" Quality: %d \n", quality);
-    printf(" Exposure: %1.0fms\n", round(asiExposure / 1000));
-    printf(" Max Exposure: %dms\n", asiMaxExposure);
-    printf(" Auto Exposure: %d\n", asiAutoExposure);
-    printf(" Gain: %d\n", asiGain);
-    printf(" Max Gain: %d\n", asiMaxGain);
-    printf(" Cooler Enabled: %d\n", asiCoolerEnabled);
-    printf(" Target Temperature: %ldC\n", asiTargetTemp);
-    printf(" Auto Gain: %d\n", asiAutoGain);
-    printf(" Brightness: %d\n", asiBrightness);
-    printf(" Gamma: %d\n", asiGamma);
-    printf(" WB Red: %d\n", asiWBR);
-    printf(" WB Blue: %d\n", asiWBB);
-    printf(" Binning: %d\n", bin);
-    printf(" Delay: %dms\n", delay);
-    printf(" Daytime Delay: %dms\n", daytimeDelay);
-    printf(" USB Speed: %d\n", asiBandwidth);
-    printf(" Text Overlay: %s\n", ImgText);
-    printf(" Text Position: %dpx left, %dpx top\n", iTextX, iTextY);
-    printf(" Font Name:  %d\n", fontname[fontnumber]);
-    printf(" Font Color: %d , %d, %d\n", fontcolor[0], fontcolor[1], fontcolor[2]);
-    printf(" Small Font Color: %d , %d, %d\n", smallFontcolor[0], smallFontcolor[1], smallFontcolor[2]);
-    printf(" Font Line Type: %d\n", linetype[linenumber]);
-    printf(" Font Size: %1.1f\n", fontsize);
-    printf(" Font Line: %d\n", linewidth);
-    printf(" Outline Font : %d\n", outlinefont);
-    printf(" Flip Image: %d\n", asiFlip);
-    printf(" Filename: %s\n", fileName);
-    printf(" Latitude: %s\n", latitude);
-    printf(" Longitude: %s\n", longitude);
-    printf(" Sun Elevation: %s\n", angle);
-    printf(" Preview: %d\n", preview);
-    printf(" Time: %d\n", time);
-    printf(" Darkframe: %d\n", darkframe);
-    printf(" Show Details: %d\n", showDetails);
-    printf("%s", KNRM);
+    a_logger("%s", KGRN);
+    a_logger("\nCapture Settings: \n");
+    a_logger(" Image Type: %s\n", sType);
+    a_logger(" Resolution: %dx%d \n", width, height);
+    a_logger(" Quality: %d \n", quality);
+    a_logger(" Exposure: %1.0fms\n", round(asiExposure / 1000));
+    a_logger(" Max Exposure: %dms\n", asiMaxExposure);
+    a_logger(" Auto Exposure: %d\n", asiAutoExposure);
+    a_logger(" Gain: %d\n", asiGain);
+    a_logger(" Max Gain: %d\n", asiMaxGain);
+    a_logger(" Cooler Enabled: %d\n", asiCoolerEnabled);
+    a_logger(" Target Temperature: %ldC\n", asiTargetTemp);
+    a_logger(" Auto Gain: %d\n", asiAutoGain);
+    a_logger(" Brightness: %d\n", asiBrightness);
+    a_logger(" Gamma: %d\n", asiGamma);
+    a_logger(" WB Red: %d\n", asiWBR);
+    a_logger(" WB Blue: %d\n", asiWBB);
+    a_logger(" Binning: %d\n", bin);
+    a_logger(" Delay: %dms\n", delay);
+    a_logger(" Daytime Delay: %dms\n", daytimeDelay);
+    a_logger(" USB Speed: %d\n", asiBandwidth);
+    a_logger(" Text Overlay: %s\n", ImgText);
+    a_logger(" Text Position: %dpx left, %dpx top\n", iTextX, iTextY);
+    a_logger(" Font Name:  %d\n", fontname[fontnumber]);
+    a_logger(" Font Color: %d , %d, %d\n", fontcolor[0], fontcolor[1], fontcolor[2]);
+    a_logger(" Small Font Color: %d , %d, %d\n", smallFontcolor[0], smallFontcolor[1], smallFontcolor[2]);
+    a_logger(" Font Line Type: %d\n", linetype[linenumber]);
+    a_logger(" Font Size: %1.1f\n", fontsize);
+    a_logger(" Font Line: %d\n", linewidth);
+    a_logger(" Outline Font : %d\n", outlinefont);
+    a_logger(" Flip Image: %d\n", asiFlip);
+    a_logger(" Filename: %s\n", fileName);
+    a_logger(" Latitude: %s\n", latitude);
+    a_logger(" Longitude: %s\n", longitude);
+    a_logger(" Sun Elevation: %s\n", angle);
+    a_logger(" Preview: %d\n", preview);
+    a_logger(" Time: %d\n", time);
+    a_logger(" Darkframe: %d\n", darkframe);
+    a_logger(" Show Details: %d\n", showDetails);
+    a_logger("%s", KNRM);
 
     ASISetROIFormat(CamNum, width, height, bin, (ASI_IMG_TYPE)Image_type);
 
@@ -872,16 +887,16 @@ int main(int argc, char *argv[])
         ASI_ERROR_CODE err = ASISetControlValue(CamNum, ASI_COOLER_ON, asiCoolerEnabled == 1 ? ASI_TRUE : ASI_FALSE, ASI_FALSE);
 	if (err != ASI_SUCCESS)
 	{
-		printf("%s", KRED);
-		printf(" Could not enable cooler\n");
-		printf("%s", KNRM);
+		a_logger("%s", KRED);
+		a_logger(" Could not enable cooler\n");
+		a_logger("%s", KNRM);
 	}
 	err = ASISetControlValue(CamNum, ASI_TARGET_TEMP, asiTargetTemp, ASI_FALSE);
 	if (err != ASI_SUCCESS)
         {
-                printf("%s", KRED);
-                printf(" Could not set cooler temperature\n");
-                printf("%s", KNRM);
+                a_logger("%s", KRED);
+                a_logger(" Could not set cooler temperature\n");
+                a_logger("%s", KNRM);
         }
     }
 
@@ -918,7 +933,7 @@ int main(int argc, char *argv[])
         calculateDayOrNight(latitude, longitude, angle);
 
         lastDayOrNight = dayOrNight;
-        printf("\n");
+        a_logger("\n");
         if (dayOrNight == "DAY")
         {
             // Setup the daytime capture parameters
@@ -930,13 +945,13 @@ int main(int argc, char *argv[])
             if (daytimeCapture != 1)
             {
                 needCapture = false;
-                printf("It's daytime... we're not saving images\n");
+                a_logger("It's daytime... we're not saving images\n");
                 usleep(daytimeDelay * 1000);
             }
             else
             {
-                printf("Starting daytime capture\n");
-                printf("Saving auto exposed images every %d ms\n\n", daytimeDelay);
+                a_logger("Starting daytime capture\n");
+                a_logger("Saving auto exposed images every %d ms\n\n", daytimeDelay);
                 exp_ms         = 32;
                 useDelay       = daytimeDelay;
                 captureTimeout = exp_ms <= 100 ? 200 : exp_ms * 2;
@@ -949,18 +964,18 @@ int main(int argc, char *argv[])
             // Setup the night time capture parameters
             if (asiAutoExposure == 1)
             {
-                printf("Saving auto exposed images every %d ms\n\n", delay);
+                a_logger("Saving auto exposed images every %d ms\n\n", delay);
             }
             else
             {
-                printf("Saving %ds exposure images every %d ms\n\n", (int)round(currentExposure / 1000000), delay);
+                a_logger("Saving %ds exposure images every %d ms\n\n", (int)round(currentExposure / 1000000), delay);
             }
             // Set exposure value for night time capture
             useDelay = delay;
             ASISetControlValue(CamNum, ASI_EXPOSURE, currentExposure, asiAutoExposure == 1 ? ASI_TRUE : ASI_FALSE);
             ASISetControlValue(CamNum, ASI_GAIN, asiGain, asiAutoGain == 1 ? ASI_TRUE : ASI_FALSE);
         }
-        printf("Press Ctrl+C to stop\n\n");
+        a_logger("Press Ctrl+C to stop\n\n");
 
         /*
         William - Not sure why we are ignoring auto exposure changes
@@ -986,19 +1001,19 @@ int main(int argc, char *argv[])
                     if (lastExp != autoExp)
                     {
                         flushingStatus = 2;
-                        printf("exp changed %ld -> %ld, flushing ...\n", lastExp, autoExp);
+                        a_logger("exp changed %ld -> %ld, flushing ...\n", lastExp, autoExp);
                     }
                     lastExp = autoExp;
                     if (flushingStatus != 0)
                     {
-                        printf("flushing %d\n", flushingStatus);
+                        a_logger("flushing %d\n", flushingStatus);
                         flushingStatus --;
                         continue;
                     }
                     */
                     if (brokenDetector(pRgb))
                     {
-                        printf("bad image detected!\n");
+                        a_logger("bad image detected!\n");
                         continue;
                     }
 
@@ -1006,11 +1021,11 @@ int main(int argc, char *argv[])
                     The following function will check if the image is a "mosaic", meaning it is composed
                     of multiple rectangles of various images. This happens on some ASI120MC clone cameras                    
                     **/
-                    if (mosaicImage(pRgb))
+                    /*if (mosaicImage(pRgb))
                     {
-                        printf("Mosaic Image deteced! Trying again\n");
+                        a_logger("Mosaic Image deteced! Trying again\n");
                         continue;
-                    }
+                    }*/
 
                     // Get Current Time for overlay
                     sprintf(bufTime, "%s", getTime());
@@ -1044,7 +1059,7 @@ int main(int argc, char *argv[])
                             iYOffset += 30;
                         }
                     }
-                    printf("Exposure value: %.0f µs\n", (float)autoExp);
+                    a_logger("Exposure value: %.0f µs\n", (float)autoExp);
                     if (asiAutoExposure == 1)
                     {
                         // Retrieve the current Exposure for smooth transition to night time
@@ -1053,9 +1068,9 @@ int main(int argc, char *argv[])
                     }
 
                     // Save the image
-                    printf("Saving...");
-                    printf(bufTime);
-                    printf("\n");
+                    a_logger("Saving...");
+                    a_logger(bufTime);
+                    a_logger("\n");
                     if (!bSavingImg)
                     {
                         pthread_mutex_lock(&mtx_SaveImg);
@@ -1067,13 +1082,13 @@ int main(int argc, char *argv[])
                     if (asiAutoGain == 1 && dayOrNight == "NIGHT")
                     {
                         ASIGetControlValue(CamNum, ASI_GAIN, &autoGain, &bAuto);
-                        printf("Auto Gain value: %d\n", (int)autoGain);
+                        a_logger("Auto Gain value: %d\n", (int)autoGain);
                         writeToLog(autoGain);
                     }
 
                     if (asiAutoExposure == 1)
                     {
-                        printf("Auto Exposure value: %d ms\n", (int)round(autoExp / 1000));
+                        a_logger("Auto Exposure value: %d ms\n", (int)round(autoExp / 1000));
                         writeToLog(autoExp);
                         if (dayOrNight == "NIGHT")
                         {
@@ -1090,7 +1105,7 @@ int main(int argc, char *argv[])
                             // if using auto-exposure and the actual exposure is less than the max,
                             // we still wait until we reach maxexposure. This is important for a
                             // constant frame rate during timelapse generation
-                            printf("Sleeping: %d ms\n", asiMaxExposure - (int)(autoExp / 1000) + useDelay);
+                            a_logger("Sleeping: %d ms\n", asiMaxExposure - (int)(autoExp / 1000) + useDelay);
                             usleep((asiMaxExposure * 1000 - autoExp) + useDelay * 1000);
                         }
                         else
@@ -1128,6 +1143,6 @@ int main(int argc, char *argv[])
         pthread_mutex_unlock(&mtx_SaveImg);
         pthread_join(hthdSave, 0);
     }
-    printf("main function over\n");
+    a_logger("main function over\n");
     return 1;
 }
